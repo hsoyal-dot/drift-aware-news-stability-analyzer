@@ -1,0 +1,8 @@
+model: gemini-2.5-flash
+num_variants: 3
+temperature: 0.7
+similarity_threshold: 0.85
+embedding_model: sentence-transformers/all-MiniLM-L6-v2
+stable_threshold: 0.9
+style_sensitive_threshold: 0.6
+report_title: "News Stability Analysis Report"
