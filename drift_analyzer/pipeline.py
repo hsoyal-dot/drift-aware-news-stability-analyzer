@@ -15,6 +15,7 @@ load_dotenv()
 from .generation.variant_generator import generate_variants
 from .extraction.claim_extractor import extract_claims
 from .comparison.claim_comparator import compare_claims
+from .comparison.drift_classifier import classify_drift
 from .reporting.report_generator import generate_report
 
 
@@ -39,10 +40,20 @@ def run_analysis(article_text: str, config_path: str = "config.yaml"):
     """
     cfg = load_config(config_path)
     variants = generate_variants(article_text, cfg)
-    claims = [extract_claims(v, cfg) for v in variants]
+    claims = [extract_claims(v["text"], cfg) for v in variants]
+    
+    # Compare to group claims, then classify them 
     comparison = compare_claims(claims, cfg)
-    report_md = generate_report(comparison, cfg)
-    return report_md
+    classified_comparison = classify_drift(comparison, len(variants), cfg)
+    
+    report_md = generate_report(classified_comparison, cfg)
+    
+    return {
+        "report_md": report_md,
+        "variants": variants,
+        "claims": claims,
+        "comparison": classified_comparison
+    }
 
 if __name__ == "__main__":
     import sys
