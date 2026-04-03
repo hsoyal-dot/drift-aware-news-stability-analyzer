@@ -6,10 +6,12 @@ Extracts atomic factual claims from a news article variant using an LLM.
 
 import os
 import json
+import time
 from typing import List, Dict
 import google.generativeai as genai
+from google.api_core.exceptions import ResourceExhausted
 
-def _call_llm_for_claims(text: str, model_name: str) -> List[Dict]:
+def _call_llm_for_claims(text: str, model_name: str, max_retries: int = 3) -> List[Dict]:
     """Call LLM to extract claims.
     
     Returns a list of claim dictionaries with keys: subject, predicate, object, confidence.
@@ -21,16 +23,35 @@ def _call_llm_for_claims(text: str, model_name: str) -> List[Dict]:
     
     model = genai.GenerativeModel(model_name)
     prompt = (
-        "Extract all key atomic factual claims from the following text. "
+        "Extract the TOP 10 most crucial, distinct factual claims from the following text. "
+        "Do not extract every minor detail. Focus only on the core facts.\n"
         "Return the output STRICTLY as a JSON list of objects, where each object has "
         "'subject', 'predicate', 'object', and 'confidence' (float between 0 and 1). "
         "Do not include any explanation or markdown formatting outside the JSON.\n\n"
         f"Text:\n{text}"
     )
-    response = model.generate_content(
-        prompt,
-        generation_config=genai.types.GenerationConfig(temperature=0.1)
-    )
+    
+    response = None
+    for attempt in range(max_retries):
+        try:
+            response = model.generate_content(
+                prompt,
+                generation_config=genai.types.GenerationConfig(temperature=0.1)
+            )
+            break
+        except ResourceExhausted as e:
+            if attempt == max_retries - 1:
+                raise
+            print(f"Rate limit hit in claim_extractor. Sleeping 40s... (Attempt {attempt+1}/{max_retries})")
+            time.sleep(40)
+        except Exception as e:
+            if "429" in str(e) or "Quota exceeded" in str(e):
+                if attempt == max_retries - 1:
+                    raise
+                print(f"Rate limit hit in claim_extractor. Sleeping 40s... (Attempt {attempt+1}/{max_retries})")
+                time.sleep(40)
+            else:
+                raise
     
     result_text = response.text.strip()
     if result_text.startswith("```json"):
